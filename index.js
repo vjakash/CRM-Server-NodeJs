@@ -65,7 +65,54 @@ function permission(allowedUsers) {
         }
     }
 }
-//resgister endpoint
+app.get('/', (req, res) => {
+        res.json({
+            available_api: [{
+                endpoint: "/register",
+                method: "post"
+            }, {
+                endpoint: "/accountverification",
+                method: "post"
+            }, {
+                endpoint: "/forgotpassword",
+                method: "post"
+            }, {
+                endpoint: "/resetpassword",
+                method: "post"
+            }, {
+                endpoint: "/login",
+                method: "post"
+            }, {
+                endpoint: "/adduser",
+                method: "post"
+            }, {
+                endpoint: "/createlead",
+                method: "post"
+            }, {
+                endpoint: "/updatelead",
+                method: "put"
+            }, {
+                endpoint: "/deletelead",
+                method: "delete"
+            }, {
+                endpoint: "/listlead",
+                method: "get"
+            }, {
+                endpoint: "/createcontact",
+                method: "post"
+            }, {
+                endpoint: "/updatecontact",
+                method: "put"
+            }, {
+                endpoint: "/deletecontact",
+                method: "delete"
+            }, {
+                endpoint: "/listcontact",
+                method: "get"
+            }, ]
+        })
+    })
+    //resgister endpoint
 app.post('/register', async(req, res) => {
     let { email, firstName, lastName, password, userType } = req.body;
     if (email === undefined || firstName === undefined || lastName === undefined || password === undefined || userType === undefined) {
