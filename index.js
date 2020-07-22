@@ -509,7 +509,7 @@ app.delete('/deletecontact', [authenticate, accessVerification("delete")], async
 app.get('/listcontacts', [authenticate, accessVerification("view")], async(req, res) => {
     let client = await mongodb.connect(dbURL).catch(err => { throw err });
     let db = client.db('crm');
-    let contacts = db.collection("contacts").find({}).toArray().catch(err => { throw err; });
+    let contacts = await db.collection("contacts").find({}).toArray().catch(err => { throw err; });
     client.close();
     res.status(200).json({
         contacts
