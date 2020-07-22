@@ -46,6 +46,10 @@ async function authenticate(req, res, next) {
             } else {
                 console.log(decode);
                 req.userType = decode.userType;
+                if (req.accessRights === []) {
+                    req.accessRights = ["view"]
+                }
+                req.accessRights = decode.accessRights
                 next();
             }
         })
@@ -63,6 +67,24 @@ function permission(allowedUsers) {
                 message: 'Not authorized to access'
             })
         }
+    }
+}
+
+function accessVerification(access) {
+    const isAllowed = accessRights => accessRights.indexOf(access) > -1;
+    return (req, res, next) => {
+        if (req.userType === "employee") {
+            if (isAllowed(req.accessRights)) {
+                next();
+            } else {
+                res.status(401).json({
+                    message: 'Have no access'
+                })
+            }
+        } else {
+            next();
+        }
+
     }
 }
 app.get('/', (req, res) => {
@@ -114,8 +136,8 @@ app.get('/', (req, res) => {
 });
 //resgister endpoint
 app.post('/register', async(req, res) => {
-    let { email, firstName, lastName, password, userType } = req.body;
-    if (email === undefined || firstName === undefined || lastName === undefined || password === undefined || userType === undefined) {
+    let { email, firstName, lastName, password, userType, accessRights } = req.body;
+    if (email === undefined || firstName === undefined || lastName === undefined || password === undefined || userType === undefined || accessRights === undefined) {
         res.status(400).json({
             message: 'Fields missing'
         });
@@ -133,7 +155,7 @@ app.post('/register', async(req, res) => {
             let hash = await bcrypt.hash(password, salt).catch((err) => { throw err; });
             password = hash;
             let accountVerified = false;
-            await db.collection('users').insertOne({ email, firstName, lastName, password, userType, accountVerified }).catch(err => { throw err; });
+            await db.collection('users').insertOne({ email, firstName, lastName, password, userType, accountVerified, accessRights }).catch(err => { throw err; });
             let buf = await require('crypto').randomBytes(32);
             let token = buf.toString('hex');
             await db.collection('users').updateOne({ email }, { $set: { verificationToken: token } });
@@ -251,7 +273,7 @@ app.post("/login", async(req, res) => {
                 bcrypt.compare(password, data.password, function(err, result) {
                     if (err) throw err;
                     if (result) {
-                        jwt.sign({ id: data["_id"], email: data["email"], userType: data["userType"] }, 'qwertyuiopasdfghjkl', { expiresIn: '10h' }, function(err, token) {
+                        jwt.sign({ id: data["_id"], email: data["email"], userType: data["userType"], accessRights: data['accessRights'] }, 'qwertyuiopasdfghjkl', { expiresIn: '10h' }, function(err, token) {
                             if (err) throw err;
                             client.close();
                             res.status(200).json({
@@ -283,9 +305,9 @@ app.post("/login", async(req, res) => {
 
 });
 app.post('/adduser', [authenticate, permission(["admin", "manager"])], async(req, res) => {
-    let { email, firstName, lastName } = req.body;
+    let { email, firstName, lastName, accessRights } = req.body;
     let userType = "employee";
-    if (email === undefined || firstName === undefined || lastName === undefined || userType === undefined) {
+    if (email === undefined || firstName === undefined || lastName === undefined || userType === undefined || accessRights === undefined) {
         res.status(400).json({
             message: 'Fields missing'
         });
@@ -305,7 +327,7 @@ app.post('/adduser', [authenticate, permission(["admin", "manager"])], async(req
             let hash = await bcrypt.hash(password, salt).catch((err) => { throw err; });
             // password = hash;
             let accountVerified = false;
-            await db.collection('users').insertOne({ email, firstName, lastName, password: hash, userType, accountVerified }).catch(err => { throw err; });
+            await db.collection('users').insertOne({ email, firstName, lastName, password: hash, userType, accountVerified, accessRights }).catch(err => { throw err; });
             let buf = await require('crypto').randomBytes(32);
             let token = buf.toString('hex');
             await db.collection('users').updateOne({ email }, { $set: { verificationToken: token } });
@@ -333,7 +355,7 @@ app.post('/adduser', [authenticate, permission(["admin", "manager"])], async(req
         }
     }
 })
-app.post('/createlead', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.post('/createlead', [authenticate, accessVerification("create")], async(req, res) => {
     let { owner, firstName, phone, lastName, company, email, leadStatus } = req.body;
     if (owner === undefined || firstName === undefined || phone === undefined || email === undefined || leadStatus === undefined) {
         res.status(400).json({
@@ -387,7 +409,7 @@ app.post('/createlead', [authenticate, permission(["admin", "manager"])], async(
         });
     }
 });
-app.put('/updatelead', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.put('/updatelead', [authenticate, accessVerification("update")], async(req, res) => {
     let { leadId } = req.body;
     if (leadId === undefined) {
         res.status(400).json({
@@ -405,7 +427,7 @@ app.put('/updatelead', [authenticate, permission(["admin", "manager"])], async(r
         });
     }
 });
-app.delete('/deletelead', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.delete('/deletelead', [authenticate, accessVerification("delete")], async(req, res) => {
     let { leadId } = req.body;
     if (leadId === undefined) {
         res.status(400).json({
@@ -423,7 +445,7 @@ app.delete('/deletelead', [authenticate, permission(["admin", "manager"])], asyn
         });
     }
 });
-app.get('/listlead', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.get('/listlead', [authenticate, accessVerification("view")], async(req, res) => {
     let client = await mongodb.connect(dbURL).catch(err => { throw err });
     let db = client.db('crm');
     let leads = await db.collection("leads").find().toArray().catch(err => { throw err; });
@@ -432,7 +454,7 @@ app.get('/listlead', [authenticate, permission(["admin", "manager"])], async(req
         leads
     });
 });
-app.post('/createcontact', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.post('/createcontact', [authenticate, accessVerification("create")], async(req, res) => {
     let { owner, firstName, phone, lastName, company, email, dob } = req.body;
     if (owner === undefined || firstName === undefined || phone === undefined || email === undefined) {
         res.status(400).json({
@@ -448,7 +470,7 @@ app.post('/createcontact', [authenticate, permission(["admin", "manager"])], asy
         });
     }
 });
-app.put('/updatecontact', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.put('/updatecontact', [authenticate, accessVerification("update")], async(req, res) => {
     let { contactId } = req.body;
     if (contactId === undefined) {
         res.status(400).json({
@@ -466,7 +488,7 @@ app.put('/updatecontact', [authenticate, permission(["admin", "manager"])], asyn
         });
     }
 });
-app.delete('/deletecontact', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.delete('/deletecontact', [authenticate, accessVerification("delete")], async(req, res) => {
     let { contactId } = req.body;
     if (contactId === undefined) {
         res.status(400).json({
@@ -484,7 +506,7 @@ app.delete('/deletecontact', [authenticate, permission(["admin", "manager"])], a
         });
     }
 });
-app.get('/listcontacts', [authenticate, permission(["admin", "manager"])], async(req, res) => {
+app.get('/listcontacts', [authenticate, accessVerification("view")], async(req, res) => {
     let client = await mongodb.connect(dbURL).catch(err => { throw err });
     let db = client.db('crm');
     let contacts = db.collection("contacts").find({}).toArray().catch(err => { throw err; });
